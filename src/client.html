@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html>
+    <meta charset="utf-8">
+    <!-- <script src="https://d3js.org/d3.v5.min.js"></script> -->
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.0.0/lib/p5.js"></script>
+    <body>
+        <div id="soundwave"></div>
+    </body>
+    <script>
+        websocket = new WebSocket("ws://localhost:2020");
+        websocket.binaryType = 'arraybuffer';
+        websocket.onmessage = function(event) {
+            if (event.data instanceof ArrayBuffer) {
+                arr = new Float32Array(event.data);
+
+                for (i=0; i < arr.length; i++){
+
+                    // check if array value is false or NaN
+                    if (arr[i] === false || Number.isNaN(arr[i])) {
+                        console.log("NaN found at place " + i);
+                        console.log("NaN found at place " + i);
+                        console.log("NaN found at place " + i);
+                        console.log("NaN found at place " + i);
+                    }
+
+                }
+
+                buffer = buffer.concat(Array.from(arr));
+            }
+        }
+        websocket.onopen = function(event) {
+            websocket.send("Hello socket!");
+        }
+    </script> 
+    <script>
+    
+    var buffer = [0.];
+
+    let data = [0., 0.];
+    var meanMax = [0., 0.];
+    var means = [0., 0.];
+    var mean_volume = 0.
+
+    var SAMPLES_PER_SECOND = 44100;
+    var UPDATE_INTERVAL = 30; // 30fps
+    var DISPLAY_NTH_SAMPLE = 10;
+    var SAMPLES_DISPLAY_PER_SECOND = SAMPLES_PER_SECOND / DISPLAY_NTH_SAMPLE ;
+
+    setInterval(function() {
+        n_new_samples = SAMPLES_PER_SECOND / UPDATE_INTERVAL;
+        if (buffer.length < n_new_samples) {
+            console.error("WARNING: not enough data");
+            return;
+        }
+	while (buffer.length > SAMPLES_PER_SECOND) {
+	    console.error("WARNING: sound delayed by 1s, dropping 0.5s");
+	    buffer = buffer.slice(SAMPLES_PER_SECOND / 2);
+	}
+
+	to_display = Math.floor(n_new_samples / DISPLAY_NTH_SAMPLE);
+    // display every 10th sample
+    var sumAbsVolumes = 0.;
+    var maxAbsVolume = 0.;
+
+    for (i = 0; i < to_display; i++) {
+            // var volume = buffer[i * DISPLAY_NTH_SAMPLE] + buffer[i * DISPLAY_NTH_SAMPLE + 1] + buffer[i * DISPLAY_NTH_SAMPLE + 2];
+            // data.push(volume / 3);
+        var volume = buffer[i * DISPLAY_NTH_SAMPLE];
+        data.push(volume);
+        sumAbsVolumes += Math.abs(volume);
+        if (Math.abs(volume) > maxAbsVolume) {
+            maxAbsVolume = Math.abs(volume);
+        }
+        // var mean = 0;
+        // var max_ = 0;
+        // for (j = Math.max(0, data.length-40); j < data.length; j++) {
+	    	// mean += Math.abs(data[j]);
+		    // if (data[j] > max_) {
+		        // max_ = data[j];
+            // }
+	    // }
+	    // means.push(mean/40);
+	    // meanMax.push(max_);
+    }
+    means.push(sumAbsVolumes / to_display);
+    meanMax.push(maxAbsVolume);
+
+    buffer = buffer.slice(n_new_samples);
+    // only display last 10 seconds
+    if (data.length > SAMPLES_DISPLAY_PER_SECOND * 5) {
+        var slice_idx = data.length - SAMPLES_DISPLAY_PER_SECOND * 5;
+        slice_idx = slice_idx - (slice_idx % ALIGN_ARRAY);
+        data  = data.slice(slice_idx);
+
+        var slice_idx = data.length - SAMPLES_DISPLAY_PER_SECOND * 5;
+        slice_idx = slice_idx - (slice_idx % ALIGN_ARRAY);
+        means = means.slice(slice_idx);
+        meanMax = meanMax.slice(slice_idx);
+    }
+    }, 1000 / UPDATE_INTERVAL);
+
+
+// 0.1 and 0.6
+
+let y = 100;
+let w = 1;
+
+let WIDTH = window.innerWidth;//720;
+let HEIGHT = window.innerHeight;//400;
+
+var y_mid = HEIGHT / 2;
+var x_step = 1.;//0.48;
+var max_displayed = WIDTH / x_step;
+var ith = 1;
+if (SAMPLES_DISPLAY_PER_SECOND * 5 > max_displayed) {
+    // ceil: on screen, floor: off screen
+    ith = Math.ceil((SAMPLES_DISPLAY_PER_SECOND * 5) / max_displayed);
+}
+
+var ALIGN_ARRAY = ith;
+var MIN_THRESHOLD = 0.1;
+var MAX_THRESHOLD = 0.6;
+
+function setup() {
+    createCanvas(WIDTH, HEIGHT);
+    stroke(255);
+    frameRate(30);
+}
+
+function draw() {
+    background(0);
+    
+    var dataSum = 0.
+    var fractionForMean = 0.25;
+    var meanIsFrom = (1 - fractionForMean) * (data.length / ith);
+
+    stroke(255);
+    strokeWeight(x_step);
+    for (i = 0; i < data.length / ith; i++) {
+        // var volume = 0.;
+        // for (j = 0; j < ith; j++) {
+            // volume += data[i * ith + j]; 
+        // }
+        // var x_i = volume / ith
+        var x_i = data[i * ith];
+        var y0 = y_mid - (height * x_i / 2);
+        var y1 = y_mid + (height * x_i / 2);
+        line(i * x_step, y0, i * x_step, y1);
+        if (i >= meanIsFrom) {
+            dataSum += Math.abs(x_i);
+        }
+    }
+    var dataMean = dataSum / (fractionForMean * data.length / ith);
+
+    strokeWeight(1.0);
+    line(0, y_mid - (height * dataMean / 2), width, y_mid - (height * dataMean / 2));
+    line(0, y_mid + (height * dataMean / 2), width, y_mid + (height * dataMean / 2));
+    
+    stroke(0, 255, 0);
+    line(0, y_mid - (height * MIN_THRESHOLD / 2), width, y_mid - (height * MIN_THRESHOLD / 2));
+    line(0, y_mid + (height * MIN_THRESHOLD / 2), width, y_mid + (height * MIN_THRESHOLD / 2));
+    stroke(255, 0, 0);
+    line(0, y_mid - (height * MAX_THRESHOLD / 2), width, y_mid - (height * MAX_THRESHOLD / 2));
+    line(0, y_mid + (height * MAX_THRESHOLD / 2), width, y_mid + (height * MAX_THRESHOLD / 2));
+}
+
+</script>
+</html>
